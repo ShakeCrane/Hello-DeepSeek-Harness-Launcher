@@ -175,14 +175,15 @@ public record DshVendor(
         if (host == null) {
             return null;
         }
-        for (DshVendor vendor : catalogue()) {
+        // The offered list may name an address the catalogue types differently. Use the
+        // launcher's configured metadata first: the catalogue can describe a protocol that the
+        // launcher itself cannot route, even for a provider explicitly offered in the UI.
+        for (DshVendor vendor : offered()) {
             if (host.equals(hostOf(vendor.baseUrl))) {
                 return vendor;
             }
         }
-        // The offered list may name an address the catalogue types differently; it wins because it
-        // carries the name this launcher shows.
-        for (DshVendor vendor : offered()) {
+        for (DshVendor vendor : catalogue()) {
             if (host.equals(hostOf(vendor.baseUrl))) {
                 return vendor;
             }
