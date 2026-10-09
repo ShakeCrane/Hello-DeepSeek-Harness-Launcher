@@ -59,6 +59,12 @@ public final class DshPaths {
     /// Cached copies of remote catalogues such as the quick-install presets.
     public static final Path CATALOG = ROOT.resolve("catalog");
 
+    /// Content-addressed local plugin packages shared across instances.
+    ///
+    /// Only the source archives are shared. Each profile still installs its own dependency
+    /// graph, and each instance keeps its own copy of a locally installed archive.
+    public static final Path PLUGIN_LIBRARY = ROOT.resolve("plugin-library");
+
     /// Where the logs a person exports from the log window are written.
     ///
     /// **Not** the process's working directory, which is what an export relative to it amounts to:

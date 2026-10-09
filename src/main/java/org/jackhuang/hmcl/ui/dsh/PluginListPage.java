@@ -33,6 +33,7 @@ import org.jackhuang.hmcl.dsh.DshException;
 import org.jackhuang.hmcl.dsh.DshPluginSources;
 import org.jackhuang.hmcl.dsh.DshInstance;
 import org.jackhuang.hmcl.dsh.DshLocalPlugins;
+import org.jackhuang.hmcl.dsh.DshPluginLibrary;
 import org.jackhuang.hmcl.dsh.DshPluginInstaller;
 import org.jackhuang.hmcl.dsh.DshPluginPatch;
 import org.jackhuang.hmcl.task.Schedulers;
@@ -252,8 +253,40 @@ public final class PluginListPage extends ListPageBase<PluginListPage.PluginRow>
         }
 
         Path file = chosen.toPath();
-        PluginInstalls.run(instance, progress ->
-                DshLocalPlugins.install(instance, file, progress::accept), this::refresh);
+        PluginInstalls.run(instance, progress -> {
+            // Keep a reusable source copy, but never install against the shared path:
+            // a profile must continue to own its own local plugin archive.
+            Path retained = DshPluginLibrary.retain(file);
+            DshLocalPlugins.install(instance, retained, progress::accept);
+        }, this::refresh);
+    }
+
+    /// Installs a previously imported local plugin into this instance.
+    ///
+    /// The chooser uses the ordinary HMCL file-install flow, rooted at the shared
+    /// archive library. An installation still gets its own independent local copy.
+    private void installFromLibrary() {
+        Path library = DshPluginLibrary.directory();
+        try {
+            java.nio.file.Files.createDirectories(library);
+        } catch (java.io.IOException e) {
+            Controllers.dialog(e.getMessage(), i18n("message.error"), MessageType.ERROR);
+            return;
+        }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle(i18n("dsh.instance.plugins.library"));
+        chooser.setInitialDirectory(library.toFile());
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(
+                i18n("dsh.instance.plugins.add.filter"), "*.tgz"));
+        java.io.File chosen = chooser.showOpenDialog(Controllers.getStage());
+        if (chosen == null) {
+            return;
+        }
+        Path selected = chosen.toPath();
+        PluginInstalls.run(instance, progress -> {
+            Path retained = DshPluginLibrary.retain(selected);
+            DshLocalPlugins.install(instance, retained, progress::accept);
+        }, this::refresh);
     }
 
     /// Installs a plugin from the source a person names.
@@ -299,6 +332,10 @@ public final class PluginListPage extends ListPageBase<PluginListPage.PluginRow>
                 // plugin is a package, so the file is a packed one.
                 ToolbarListPageSkin.createToolbarButton2(i18n("dsh.instance.plugins.add"), SVG.ADD,
                         this::installFromFile),
+                // Reuse archives downloaded or imported for another instance. The archived
+                // source is shared, never the installed plugin or its writable state.
+                ToolbarListPageSkin.createToolbarButton2(i18n("dsh.instance.plugins.library"), SVG.PACKAGE2,
+                        this::installFromLibrary),
                 // The same package from wherever it is published: a plugin that is a fork, a
                 // branch, or a repository nobody published has a repository and a revision
                 // rather than a registry entry, and this is how one of those gets in.
