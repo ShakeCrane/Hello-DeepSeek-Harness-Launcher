@@ -203,6 +203,17 @@ public record DshInstance(
         return Path.of(workspace).toAbsolutePath().normalize();
     }
 
+    /**
+     * Returns the standard filesystem boundary owned by this instance.
+     */
+    public DshInstancePaths paths() {
+        return DshInstancePaths.of(instanceDirectoryUnchecked());
+    }
+
+    private Path instanceDirectoryUnchecked() {
+        return DshPaths.instanceDirectory(id);
+    }
+
     /// Returns the configured custom home.
     ///
     /// @return the absolute custom home, or `null` when none is configured
