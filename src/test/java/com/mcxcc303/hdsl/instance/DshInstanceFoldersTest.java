@@ -166,6 +166,20 @@ class DshInstanceFoldersTest {
 	}
 
 	@Test
+	void creatingAnInstanceNeverAdoptsAnUnrelatedExistingDirectory() throws Exception {
+		Path occupied = Files.createDirectories(shown.resolve("occupied-for-create"));
+		Path document = Files.writeString(occupied.resolve("notes.txt"), "my own document");
+
+		DshException refused = assertThrows(DshException.class,
+		                                    () -> create("occupied-for-create", shown));
+		assertTrue(refused.getMessage().contains(occupied.toString()), refused.getMessage());
+		assertEquals("my own document", Files.readString(document));
+		assertFalse(Files.exists(occupied.resolve(InstanceStore.MANIFEST_NAME)),
+		            "no instance manifest should be written into an unrelated folder");
+		assertNull(InstanceStore.find("occupied-for-create"));
+	}
+
+	@Test
 	void theSameNameInTwoFoldersIsRefused() throws Exception {
 		create("shared-name", shown);
 
@@ -240,6 +254,31 @@ class DshInstanceFoldersTest {
 		           "the instance keeps its own directory, because the rename did not happen");
 		assertEquals(other.resolve("renaming-over"), InstanceStore.find("renaming-over").instanceDirectory());
 		DshInstanceManager.delete("renaming-over");
+	}
+
+	@Test
+	void aDuplicateBeginsBesideItsSourceEvenWhenAnotherFolderIsSelected() throws Exception {
+		DshInstance source = create("copy-source-in-other", other);
+		Path expected = source.instanceDirectory().resolveSibling("copy-beside-source");
+		Path[] seen = new Path[1];
+
+		// Stop at the export progress callback: no registry or package manager needed.
+		// The target has already been created, and the callback sees its actual folder.
+		RuntimeException cancelled = new RuntimeException("test stops before installation");
+		RuntimeException failed = assertThrows(RuntimeException.class,
+		                                    () -> DshInstanceManager.duplicate(source.id(), "copy-beside-source",
+		                                                                        message -> {
+				                                                                        if (message.startsWith("Recording ")) {
+					                                                                        DshInstance target = InstanceStore.find("copy-beside-source");
+					                                                                        assertNotNull(target);
+					                                                                        seen[0] = assertDoesNotThrow(target::instanceDirectory);
+					                                                                        throw cancelled;
+				                                                                        }
+			                                                                        }));
+		assertSame(cancelled, failed);
+		assertEquals(expected, seen[0], "a copy belongs beside its source, not in the selected folder");
+		assertFalse(Files.exists(shown.resolve("copy-beside-source")));
+		assertNull(InstanceStore.find("copy-beside-source"), "an interrupted copy is cleaned up");
 	}
 
 	@Test

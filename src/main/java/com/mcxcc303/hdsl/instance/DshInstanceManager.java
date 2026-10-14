@@ -33,6 +33,7 @@ import org.jetbrains.annotations.NotNullByDefault;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -228,10 +229,15 @@ public final class DshInstanceManager {
 		                                       directory.toString());
 
 		try {
-			Files.createDirectories(directory);
+			// Never adopt a pre-existing folder: it may contain the user's own files.
+			// createDirectory is atomic, unlike exists() followed by createDirectories().
+			Files.createDirectories(directory.getParent());
+			Files.createDirectory(directory);
 			if (homeMode == DshHomeMode.ISOLATED) {
 				Files.createDirectories(instance.homeDirectory());
 			}
+		} catch (FileAlreadyExistsException e) {
+			throw new DshException("Cannot create instance \"" + id + "\": " + directory + " already exists", e);
 		} catch (IOException e) {
 			throw new DshException("Failed to create " + directory, e);
 		}
@@ -433,6 +439,9 @@ public final class DshInstanceManager {
 		if (normalized.isEmpty()) {
 			throw new DshException("An instance needs a name");
 		}
+		if (normalized.equals(id)) {
+			throw new DshException("Cannot duplicate instance \"" + id + "\" onto itself");
+		}
 
 		DshInstance copy = InstanceStore.find(normalized);
 		if (copy == null) {
@@ -449,7 +458,8 @@ public final class DshInstanceManager {
 			              DshHomeMode.ISOLATED,
 			              null,
 			              source.extraArguments(),
-			              source.environment()).withIcon(source.iconOrDefault());
+			              source.environment(),
+			              source.instanceDirectory().getParent()).withIcon(source.iconOrDefault());
 			update(copy);
 		} else if (HarnessInstaller.isInstalled(copy)) {
 			// An id taken by an instance that is already whole is somebody else's. One that is
